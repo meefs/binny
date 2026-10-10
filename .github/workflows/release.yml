@@ -1,0 +1,108 @@
+name: release
+
+# Push a tag matching `v*` (e.g. `v0.1.0-beta.1`) to cut a release. Source
+# stays in this private repo; the binaries are published to the PUBLIC
+# openbin-ai/binny-releases repo so the one-liner installers
+# (openbin.ai/install-binny.sh and install-binny.ps1) can fetch them without
+# a token via the stable releases/latest/download/<asset> URL.
+#
+# Asset names are version-LESS (binny-<os>-<arch>.tar.gz, binny-windows-amd64.zip,
+# VERSION) for the same reason as the openbin CLI release. The version lives in
+# the tag and is baked into the binary (-X main.version) for `binny --version`.
+#
+# Publishing across repos needs a token with `contents: write` on
+# binny-releases: a fine-grained PAT stored as the BINNY_RELEASES_TOKEN secret.
+# Without it the publish job is skipped (the build still runs), and the
+# release can be cut by hand with scripts/release-local.sh.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name to release as (e.g. v0.1.0-beta.1)'
+        required: true
+
+env:
+  RELEASES_REPO: openbin-ai/binny-releases
+  HAS_RELEASES_TOKEN: ${{ secrets.BINNY_RELEASES_TOKEN != '' }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}/${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: linux,   arch: amd64, ext: '',     archive: tar }
+          - { os: linux,   arch: arm64, ext: '',     archive: tar }
+          - { os: darwin,  arch: amd64, ext: '',     archive: tar }
+          - { os: darwin,  arch: arm64, ext: '',     archive: tar }
+          - { os: windows, arch: amd64, ext: '.exe', archive: zip }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Test
+        if: matrix.os == 'linux' && matrix.arch == 'amd64'
+        run: go vet ./... && go test ./...
+      - name: Cross-compile
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 0
+        run: |
+          ver="${{ github.event.inputs.tag || github.ref_name }}"
+          go build -trimpath -ldflags="-s -w -X main.version=${ver}" -o "binny${{ matrix.ext }}" .
+      - name: Package
+        run: |
+          pkg="binny-${{ matrix.os }}-${{ matrix.arch }}"
+          mkdir "$pkg"
+          mv "binny${{ matrix.ext }}" "$pkg/"
+          cp README.md "$pkg/"
+          if [ "${{ matrix.archive }}" = "zip" ]; then zip -r "$pkg.zip" "$pkg/"; else tar czf "$pkg.tar.gz" "$pkg/"; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binny-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            binny-*.tar.gz
+            binny-*.zip
+          retention-days: 3
+
+  publish:
+    name: Publish to binny-releases
+    needs: build
+    if: ${{ needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for the cross-repo token
+        run: |
+          if [ "$HAS_RELEASES_TOKEN" != "true" ]; then
+            echo "BINNY_RELEASES_TOKEN is not set; skipping publish. Cut the release with scripts/release-local.sh." >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+        id: tok
+      - uses: actions/download-artifact@v4
+        if: steps.tok.outputs.skip != 'true'
+        with:
+          merge-multiple: true
+      - name: Write VERSION
+        if: steps.tok.outputs.skip != 'true'
+        run: printf '%s' "${{ github.event.inputs.tag || github.ref_name }}" > VERSION
+      - name: Create release in binny-releases
+        if: steps.tok.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ env.RELEASES_REPO }}
+          token: ${{ secrets.BINNY_RELEASES_TOKEN }}
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: BINNY ${{ github.event.inputs.tag || github.ref_name }}
+          files: |
+            binny-*.tar.gz
+            binny-*.zip
+            VERSION
+          fail_on_unmatched_files: true

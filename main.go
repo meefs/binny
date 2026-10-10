@@ -24,6 +24,9 @@ import (
 	"openbin.ai/binny/internal/tui"
 )
 
+// version is stamped by the release workflow via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "binny: "+err.Error())
@@ -36,7 +39,12 @@ func run() error {
 	// The bytes never leave the machine — that's why extraction fits a local
 	// agent. Optional: without it, extraction tools are simply unavailable.
 	samplePath := flag.String("sample", "", "path to the raw sample on disk (enables active extraction)")
+	showVersion := flag.Bool("version", false, "print the binny version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println("binny " + version)
+		return nil
+	}
 
 	ep := config.LoadEndpoints()
 
