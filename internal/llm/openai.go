@@ -122,12 +122,14 @@ func (p *openAIProvider) Stream(ctx context.Context, req Request, onText func(st
 	if err != nil {
 		return nil, err
 	}
-	resp, err := postSSE(ctx, p.http, strings.TrimRight(p.baseURL, "/")+"/chat/completions",
-		map[string]string{
-			"Authorization": "Bearer " + p.apiKey,
-			"Content-Type":  "application/json",
-			"Accept":        "text/event-stream",
-		}, raw)
+	headers := map[string]string{
+		"Content-Type": "application/json",
+		"Accept":       "text/event-stream",
+	}
+	if p.apiKey != "" { // a local server (Ollama, LM Studio) has no key to send
+		headers["Authorization"] = "Bearer " + p.apiKey
+	}
+	resp, err := postSSE(ctx, p.http, strings.TrimRight(p.baseURL, "/")+"/chat/completions", headers, raw)
 	if err != nil {
 		return nil, fmt.Errorf("openai request: %w", err)
 	}

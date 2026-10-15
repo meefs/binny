@@ -15,7 +15,7 @@ func New(p config.Provider) (Provider, error) {
 	switch p.Kind {
 	case config.KindOpenAI:
 		key := p.Key()
-		if key == "" {
+		if key == "" && !p.Keyless() {
 			return nil, fmt.Errorf("provider %q has no key — set one with /key (BYOK)", p.ID)
 		}
 		return &openAIProvider{id: p.ID, baseURL: p.BaseURL, apiKey: key, http: sharedClient()}, nil

@@ -139,6 +139,10 @@ func (m *Model) updateSetupProvider(msg tea.KeyMsg, providers []config.Provider)
 			m.append(sysLine("bedrock uses your AWS credentials — no key to set."))
 			return m, nil
 		}
+		if p.Local {
+			m.append(sysLine(p.ID + " is a local server — no key needed. Press enter to pick a model; /endpoint " + p.ID + " <url> if it runs elsewhere."))
+			return m, nil
+		}
 		m.setupProvider = p.ID
 		m.setupStage = 1
 		m.keyInput.SetValue("")
@@ -225,6 +229,9 @@ func (m *Model) updateSetupModel(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.finishSetup()
 		}
 		m.append(okLine(fmt.Sprintf("Now using %s / %s. Ready to go.", m.setupProvider, m.sess.Model)))
+		for _, l := range localModelHints(m.sess.Provider) {
+			m.append(l)
+		}
 		return m, m.finishSetup()
 	}
 	return m, nil
@@ -257,6 +264,7 @@ func (m *Model) viewSetup() string {
 	case 0:
 		b.WriteString(styleHeader.Render("Set up an LLM provider (BYOK)") + "\n")
 		b.WriteString(styleDim.Render("BINNY runs on your own API key — it's stored locally in ~/.config/binny/config.json.") + "\n")
+		b.WriteString(styleDim.Render("Local models need no key: start Ollama or LM Studio and pick it below.") + "\n")
 		b.WriteString(styleDim.Render("↑/↓ move · enter select · k set/change key · s skip · q back") + "\n\n")
 		for i, p := range m.sess.Config.Providers {
 			cursor := "  "
@@ -272,6 +280,8 @@ func (m *Model) viewSetup() string {
 			hint := ""
 			if p.Kind == config.KindBedrock {
 				hint = " (AWS creds — no key)"
+			} else if p.Local {
+				hint = styleDim.Render(" · local server, no key · " + p.BaseURL)
 			} else if p.APIKeyEnv != "" {
 				hint = styleDim.Render(" · env: $" + p.APIKeyEnv)
 			}
@@ -334,4 +344,20 @@ func clamp(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+// localModelHints are the one-time notes for a local server, printed when a
+// model is picked. Both are about the context window: a local server drops
+// the START of a long prompt silently, and that is where BINNY's system
+// prompt and tool list live.
+func localModelHints(p *config.Provider) []line {
+	if p == nil || !p.Local {
+		return nil
+	}
+	out := []line{sysLine("Local model: BINNY compacts history early so the tool list stays inside the window.")}
+	if p.ID == "ollama" {
+		out = append(out, sysLine("Ollama's default context is 4k, too small for RE. Run the server with OLLAMA_CONTEXT_LENGTH=32768 (or set num_ctx in a Modelfile)."))
+	}
+	out = append(out, sysLine("The model must support tool calling: qwen3, gpt-oss, llama3.1+, mistral-nemo, devstral do; most small instruct models do not."))
+	return out
 }

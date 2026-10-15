@@ -147,6 +147,13 @@ func NewEngine(sess *app.Session, inv *Investigation, reg *tools.Registry, provi
 	}
 	if sess.Provider != nil {
 		e.providerID = sess.Provider.ID
+		// A small window (local models) gets an earlier compaction point:
+		// ~3 bytes per token leaves room for the system prompt, the tool
+		// schemas and the reply, so the start of the history is elided by us
+		// instead of being silently dropped by the server.
+		if ct := sess.Provider.ContextTokens; ct > 0 && ct*3 < e.compactThreshold {
+			e.compactThreshold = ct * 3
+		}
 	}
 	return e
 }

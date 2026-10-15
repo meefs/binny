@@ -77,3 +77,55 @@ func TestOpenAIAdapterHonoursCustomEndpoint(t *testing.T) {
 		t.Errorf("text = %q", resp.Text())
 	}
 }
+
+// A local server (Ollama, LM Studio) has no key. The adapter must start
+// without one and must not send an Authorization header, and the live
+// /models fetch must run keyless too.
+func TestOpenAIAdapterRunsKeylessForLocalServer(t *testing.T) {
+	var gotAuth, gotModelsAuth string
+	var authPresent, modelsAuthPresent bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			gotModelsAuth, modelsAuthPresent = r.Header.Get("Authorization"), r.Header.Get("Authorization") != ""
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"data":[{"id":"qwen3:14b"},{"id":"gpt-oss:20b"}]}`))
+		default:
+			gotAuth, authPresent = r.Header.Get("Authorization"), r.Header.Get("Authorization") != ""
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"pong\"},\"finish_reason\":null}]}\n\n" +
+				"data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n" +
+				"data: [DONE]\n\n"))
+		}
+	}))
+	defer srv.Close()
+
+	local := config.Provider{ID: "ollama", Kind: config.KindOpenAI, Local: true, BaseURL: srv.URL + "/v1"}
+	p, err := New(local)
+	if err != nil {
+		t.Fatalf("local provider must start without a key: %v", err)
+	}
+	resp, err := p.Stream(context.Background(), Request{Model: "qwen3:14b", MaxTokens: 16, Messages: []Message{UserText("ping")}}, nil)
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+	if authPresent {
+		t.Errorf("keyless request carried Authorization %q", gotAuth)
+	}
+	if resp.Text() != "pong" {
+		t.Errorf("text = %q", resp.Text())
+	}
+
+	models, live := ListModels(context.Background(), local)
+	if !live || len(models) != 2 || models[0] != "qwen3:14b" {
+		t.Errorf("keyless /models: live=%v models=%v", live, models)
+	}
+	if modelsAuthPresent {
+		t.Errorf("keyless /models carried Authorization %q", gotModelsAuth)
+	}
+
+	// The same adapter without the Local flag still demands a key.
+	if _, err := New(config.Provider{ID: "router", Kind: config.KindOpenAI, BaseURL: srv.URL + "/v1"}); err == nil {
+		t.Error("non-local provider started without a key")
+	}
+}

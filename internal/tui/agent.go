@@ -220,6 +220,12 @@ func errorHint(err string) string {
 		return "→ The API key was rejected. Run /key to re-enter it (or /model to switch provider)."
 	case strings.Contains(e, "no key"):
 		return "→ /key to set a key for this provider, or /model to switch."
+	case strings.Contains(e, "connection refused"), strings.Contains(e, "no such host"):
+		return "→ Couldn't reach the provider's server. For a local model, start it first (ollama serve, or LM Studio's server tab) and check /endpoint. Your place is kept."
+	case strings.Contains(e, "does not support tools"), strings.Contains(e, "tool use is not supported"), strings.Contains(e, "tools are not supported"):
+		return "→ This model can't call tools, and BINNY works through tools. Pick a tool-capable model (/model): qwen3, gpt-oss, llama3.1+, mistral-nemo, devstral. Your place is kept."
+	case strings.Contains(e, "model") && strings.Contains(e, "not found"):
+		return "→ The server doesn't have that model. Pull it first (ollama pull <model>) or /model to pick one it lists."
 	default:
 		return ""
 	}
