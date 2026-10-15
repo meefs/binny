@@ -7,9 +7,9 @@
 
 <h1 align="center">BINNY</h1>
 
-<p align="center">A terminal agent for reverse engineering. It takes a binary, works through it with real tools, and hands you a report to review.</p>
+<p align="center">An open source agent harness for reverse engineering. Plug in any model, point it at a binary, and it works through the code with real tools and hands you a report to review.</p>
 
-BINNY opens one of your [OpenBin](https://openbin.ai) or [OpenAPK](https://openapk.ai) projects, or decompiles a file on your disk, and runs a triage, investigate, draft loop against the decompiled code. Every step is a tool call you can watch: it lists functions, reads decompilations, pulls strings, imports and data, runs scripts in a sealed sandbox, and records findings as it goes. The draft lands on the project report for you to check before anything is published.
+BINNY is the harness, not the model. It brings the tools (decompiled functions, strings, imports, data, a sealed sandbox, local Ghidra), the playbooks, the triage, investigate, draft loop, the budgets, the checkpoints and the report format. The model is whatever you plug in: Claude, GPT, DeepSeek, Qwen, Kimi, Gemini, Bedrock, or a local model through Ollama or LM Studio. BINNY opens one of your [OpenBin](https://openbin.ai) or [OpenAPK](https://openapk.ai) projects, or decompiles a file on your disk, and runs that loop against the decompiled code. Every step is a tool call you can watch: it lists functions, reads decompilations, pulls strings, imports and data, runs scripts in a sealed sandbox, and records findings as it goes. The draft lands on the project report for you to check before anything is published.
 
 It runs on your own model key, or on a local model. Nothing about your sample goes to us unless you put it in a project.
 
