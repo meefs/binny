@@ -36,7 +36,7 @@ func TestDetectFilePath(t *testing.T) {
 }
 
 func TestLooksPathish(t *testing.T) {
-	for _, s := range []string{"~/x", "/etc/hosts", "a/b", "./x"} {
+	for _, s := range []string{"~/x", "/etc/hosts", "a/b", "./x", filepath.Join("samples", "sample.bin")} {
 		if !looksPathish(s) {
 			t.Errorf("%q should look pathish", s)
 		}
@@ -45,5 +45,20 @@ func TestLooksPathish(t *testing.T) {
 		if looksPathish(s) {
 			t.Errorf("%q should NOT look pathish", s)
 		}
+	}
+}
+
+func TestDetectRelativeFilePath(t *testing.T) {
+	dir, err := os.MkdirTemp(".", "binny-sample-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	f := filepath.Join(dir, "sample.bin")
+	if err := os.WriteFile(f, []byte("MZ..."), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := detectFilePath("sample: " + f); got != f {
+		t.Errorf("relative path: got %q, want %q", got, f)
 	}
 }

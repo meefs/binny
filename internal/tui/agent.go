@@ -421,7 +421,7 @@ func detectFilePath(text string) string {
 // looksPathish is a cheap filter so we only os.Stat tokens that could be paths
 // (contain a separator or a ~/. prefix) — not every word in a sentence.
 func looksPathish(s string) bool {
-	return strings.HasPrefix(s, "~") || strings.Contains(s, "/")
+	return strings.HasPrefix(s, "~") || strings.Contains(s, "/") || strings.ContainsRune(s, filepath.Separator)
 }
 
 // cmdBudget shows or sets the active project's per-run token budget.
