@@ -82,6 +82,9 @@ type oaiStreamChunk struct {
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage *oaiUsage `json:"usage"`
+	Error *struct {
+		Message string `json:"message"`
+	} `json:"error"`
 }
 
 // oaiUsage covers the Chat Completions usage block AND the cache-hit fields the
@@ -173,6 +176,9 @@ func parseOpenAISSE(body io.Reader, model string, onText func(string)) (*Respons
 		var ch oaiStreamChunk
 		if err := json.Unmarshal([]byte(data), &ch); err != nil {
 			continue
+		}
+		if ch.Error != nil {
+			return nil, fmt.Errorf("openai stream error: %s", ch.Error.Message)
 		}
 		if ch.Usage != nil {
 			// prompt_tokens is the TOTAL input (cached + uncached) for every
