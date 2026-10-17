@@ -42,3 +42,9 @@ Type `/` in the prompt for the palette, or `/help` for the full list.
 Releases are cut by tagging `v*` (see `.github/workflows/release.yml`) or
 with `scripts/release-local.sh <tag>`. Binaries are published to the public
 `openbin-ai/binny-releases` repo; this repo stays private.
+
+## License
+
+BINNY is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE).
+Contributors must sign the [Contributor License Agreement](CLA.md); the CLA
+Assistant bot will prompt you on your first pull request.
