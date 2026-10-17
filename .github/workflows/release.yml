@@ -1,19 +1,19 @@
 name: release
 
-# Push a tag matching `v*` (e.g. `v0.1.0-beta.1`) to cut a release. Source
-# stays in this private repo; the binaries are published to the PUBLIC
-# openbin-ai/binny-releases repo so the one-liner installers
-# (openbin.ai/install-binny.sh and install-binny.ps1) can fetch them without
-# a token via the stable releases/latest/download/<asset> URL.
+# Push a tag matching `v*` (e.g. `v0.1.0-beta.2`) to cut a release. The
+# workflow cross-compiles every target, publishes the release on this repo,
+# and mirrors it to the PUBLIC openbin-ai/binny-releases repo, which the
+# one-liner installers (openbin.ai/install-binny.sh and install-binny.ps1)
+# fetch from via the stable releases/latest/download/<asset> URL.
 #
 # Asset names are version-LESS (binny-<os>-<arch>.tar.gz, binny-windows-amd64.zip,
 # VERSION) for the same reason as the openbin CLI release. The version lives in
 # the tag and is baked into the binary (-X main.version) for `binny --version`.
 #
-# Publishing across repos needs a token with `contents: write` on
-# binny-releases: a fine-grained PAT stored as the BINNY_RELEASES_TOKEN secret.
-# Without it the publish job is skipped (the build still runs), and the
-# release can be cut by hand with scripts/release-local.sh.
+# The mirror needs a token with `contents: write` on binny-releases: a
+# fine-grained PAT stored as the BINNY_RELEASES_TOKEN secret. Without it the
+# mirror step is skipped (the release here still happens) and the mirror can
+# be cut by hand with scripts/release-local.sh.
 
 on:
   push:
@@ -74,26 +74,39 @@ jobs:
           retention-days: 3
 
   publish:
-    name: Publish to binny-releases
+    name: Publish
     needs: build
     if: ${{ needs.build.result == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Check for the cross-repo token
-        run: |
-          if [ "$HAS_RELEASES_TOKEN" != "true" ]; then
-            echo "BINNY_RELEASES_TOKEN is not set; skipping publish. Cut the release with scripts/release-local.sh." >&2
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-        id: tok
       - uses: actions/download-artifact@v4
-        if: steps.tok.outputs.skip != 'true'
         with:
           merge-multiple: true
       - name: Write VERSION
-        if: steps.tok.outputs.skip != 'true'
         run: printf '%s' "${{ github.event.inputs.tag || github.ref_name }}" > VERSION
-      - name: Create release in binny-releases
+      # Not a prerelease on purpose: releases/latest/download/<asset> only
+      # resolves to full releases, and the installers depend on that URL.
+      - name: Create release in this repo
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: BINNY ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            binny-*.tar.gz
+            binny-*.zip
+            VERSION
+          fail_on_unmatched_files: true
+      - name: Check for the mirror token
+        id: tok
+        run: |
+          if [ "$HAS_RELEASES_TOKEN" != "true" ]; then
+            echo "BINNY_RELEASES_TOKEN is not set; skipping the binny-releases mirror." >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Mirror to binny-releases
         if: steps.tok.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:

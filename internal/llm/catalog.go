@@ -45,7 +45,7 @@ func ListModels(ctx context.Context, p config.Provider) ([]string, bool) {
 	if p.Kind == config.KindBedrock {
 		return p.Models, false // curated; no queryable per-account list
 	}
-	if p.Key() == "" {
+	if p.Key() == "" && !p.Keyless() {
 		return p.Models, false // can't query without a key
 	}
 
@@ -92,7 +92,9 @@ func fetchModels(ctx context.Context, p config.Provider) []string {
 		req.Header.Set("x-api-key", p.Key())
 		req.Header.Set("anthropic-version", "2023-06-01")
 	default:
-		req.Header.Set("Authorization", "Bearer "+p.Key())
+		if k := p.Key(); k != "" {
+			req.Header.Set("Authorization", "Bearer "+k)
+		}
 	}
 
 	resp, err := sharedClient().Do(req)

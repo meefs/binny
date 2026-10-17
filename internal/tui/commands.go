@@ -207,7 +207,7 @@ func helpLines() []line {
 }
 
 func modelsLines(m *Model) []line {
-	out := []line{sysLine("Configured providers (BYOK — set a key with /key, or its env var):")}
+	out := []line{sysLine("Configured providers (BYOK — set a key with /key, or its env var; local servers need none):")}
 	cfg := m.sess.Config
 	ids := make([]string, 0, len(cfg.Providers))
 	for _, p := range cfg.Providers {
@@ -217,7 +217,9 @@ func modelsLines(m *Model) []line {
 	for _, id := range ids {
 		p := cfg.Find(id)
 		mark := styleErr.Render("no key")
-		if p.HasKey() {
+		if p.Local {
+			mark = styleOK.Render("local")
+		} else if p.HasKey() {
 			mark = styleOK.Render("ready")
 		}
 		active := "  "

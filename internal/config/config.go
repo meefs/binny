@@ -151,6 +151,15 @@ type Provider struct {
 	APIKey    string       `json:"apiKey,omitempty"`    // key stored locally (set via first-run setup / /key)
 	Region    string       `json:"region,omitempty"`    // bedrock only
 	Models    []string     `json:"models"`              // selectable model ids for this provider
+	// Local marks a server on this machine (Ollama, LM Studio, llama.cpp,
+	// vLLM): no key is needed, so the provider is ready as soon as the server
+	// answers. Requests go out without an Authorization header unless a key
+	// is set anyway.
+	Local bool `json:"local,omitempty"`
+	// ContextTokens is the model's context window when it is small enough to
+	// matter (local models). The engine compacts history earlier so the
+	// system prompt and tool list are never pushed out of the window.
+	ContextTokens int `json:"contextTokens,omitempty"`
 }
 
 // Key resolves the provider's BYOK key: an explicitly-stored apiKey wins, else
@@ -166,13 +175,17 @@ func (p Provider) Key() string {
 }
 
 // HasKey reports whether the provider has a usable key. Bedrock uses the
-// ambient AWS credential chain, so it is considered ready without one.
+// ambient AWS credential chain and a Local server needs none, so both count
+// as ready without one.
 func (p Provider) HasKey() bool {
-	if p.Kind == KindBedrock {
+	if p.Kind == KindBedrock || p.Local {
 		return true
 	}
 	return p.Key() != ""
 }
+
+// Keyless reports whether requests may go out without a key: a Local server.
+func (p Provider) Keyless() bool { return p.Local }
 
 // DefaultTokenBudget is the per-run token cap when a project has no explicit
 // budget set. Conservative for BYOK; the analyst can raise it in Settings.
@@ -249,6 +262,14 @@ func Load() (*Config, bool, error) {
 // user deliberately changed — even back to the old default's URL with different
 // models — is never clobbered, and a migrated entry never re-triggers.
 func migrate(c *Config) {
+	// Presets added after the user's config was first written are appended
+	// (never inserted, so cursor positions in the picker stay stable). A user
+	// who deleted one on purpose gets it back; they can delete it again.
+	for _, d := range DefaultConfig().Providers {
+		if d.Local && c.Find(d.ID) == nil {
+			c.Providers = append(c.Providers, d)
+		}
+	}
 	for i := range c.Providers {
 		p := &c.Providers[i]
 		// Kimi shipped pointing at the China host with retired moonshot-v1
@@ -384,6 +405,34 @@ func DefaultConfig() *Config {
 				Region: "us-east-1",
 				Models: []string{"anthropic.claude-opus-4-8", "anthropic.claude-sonnet-5"},
 			},
+			// Local servers. Both expose the OpenAI API without a key; the live
+			// /models call lists whatever the user has pulled, so the static
+			// lists below are only the fallback. llama.cpp (llama-server) and
+			// vLLM work the same way: /endpoint ollama http://host:8080/v1.
+			{
+				ID: "ollama", Kind: KindOpenAI, Local: true,
+				BaseURL: "http://localhost:11434/v1",
+				Models:  []string{"qwen3:14b", "gpt-oss:20b", "llama3.1:8b"},
+				// Ollama's default window is 4k; see the hint printed on pick.
+				ContextTokens: 32768,
+			},
+			{
+				ID: "lmstudio", Kind: KindOpenAI, Local: true,
+				BaseURL:       "http://localhost:1234/v1",
+				Models:        []string{},
+				ContextTokens: 32768,
+			},
 		},
 	}
+}
+
+// LocalProviderIDs lists the shipped keyless presets, in registry order.
+func LocalProviderIDs() []string {
+	var ids []string
+	for _, p := range DefaultConfig().Providers {
+		if p.Local {
+			ids = append(ids, p.ID)
+		}
+	}
+	return ids
 }
